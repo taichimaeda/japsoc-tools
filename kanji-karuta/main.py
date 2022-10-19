@@ -10,74 +10,71 @@ from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 import qrcode
 
-URL = 'https://mojinavi.com/d/list-kanji-kanken-04'
-SELCTOR = '.itiran tr td ruby a'
+URL = 'https:/mojinavi.com/d/list-kanji-kanken-04'
+SELECTOR = '.itiran tr td ruby a'
 FONT = ImageFont.truetype('/System/Library/Fonts/ヒラギノ明朝 ProN.ttc', 500)
-HEIGHT = 2480
-WIDTH = 3508
-SPLIT = 8
-COORDS = [
-    (WIDTH // 8, HEIGHT // 4),
-    (WIDTH // 8 * 3, HEIGHT // 4),
-    (WIDTH // 8 * 5, HEIGHT // 4),
-    (WIDTH // 8 * 7, HEIGHT // 4),
-    (WIDTH // 8, HEIGHT // 4 * 3),
-    (WIDTH // 8 * 3, HEIGHT // 4 * 3),
-    (WIDTH // 8 * 5, HEIGHT // 4 * 3),
-    (WIDTH // 8 * 7, HEIGHT // 4 * 3),
+PAGE_HEIGHT = 2480
+PAGE_WIDTH = 3508
+GRID_SPLIT = 8
+GRID_COORDS = [
+    (PAGE_WIDTH / 8 * 1, PAGE_HEIGHT / 4),
+    (PAGE_WIDTH / 8 * 3, PAGE_HEIGHT / 4),
+    (PAGE_WIDTH / 8 * 5, PAGE_HEIGHT / 4),
+    (PAGE_WIDTH / 8 * 7, PAGE_HEIGHT / 4),
+    (PAGE_WIDTH / 8 * 1, PAGE_HEIGHT / 4 * 3),
+    (PAGE_WIDTH / 8 * 3, PAGE_HEIGHT / 4 * 3),
+    (PAGE_WIDTH / 8 * 5, PAGE_HEIGHT / 4 * 3),
+    (PAGE_WIDTH / 8 * 7, PAGE_HEIGHT / 4 * 3),
 ]
 
 req = requests.get(URL)
 req.encoding = req.apparent_encoding
 bs_obj = BeautifulSoup(req.text, 'html.parser')
 
-items = [(elem.text, elem['href']) for elem in bs_obj.select(SELCTOR)]
+items = [(elem.text, elem['href']) for elem in bs_obj.select(SELECTOR)]
 random.shuffle(items)
-items += [('', '') for _ in range((len(items) * -1) % SPLIT)]
+items += [('', '') for _ in range((len(items) * -1) % GRID_SPLIT)]
 chars = [char for (char, _) in items]
 links = [urlparse(URL).netloc + path for (_, path) in items]
 
-def draw_line(draw_obj, coords):
-    draw_obj.line(coords, fill='black', width=2)
+def draw_line(draw, coords):
+    draw.line(coords, fill='black', width=2)
 
-def draw_char(draw_obj, coord, char):
-    draw_obj.text(coord, char, fill='black', font=FONT, anchor='mm')
+def draw_char(draw, coord, char):
+    draw.text(coord, char, fill='black', font=FONT, anchor='mm')
 
-def draw_grid(draw_obj, image_obj):
-    draw_line(draw_obj, [(0, HEIGHT // 2), (WIDTH, HEIGHT // 2)])
-    draw_line(draw_obj, [(WIDTH // 4, 0), (WIDTH // 4, HEIGHT)])
-    draw_line(draw_obj, [(WIDTH // 4 * 2, 0), (WIDTH // 4 * 2, HEIGHT)])
-    draw_line(draw_obj, [(WIDTH // 4 * 3, 0), (WIDTH // 4 * 3, HEIGHT)])
-    image_obj = ImageOps.expand(image_obj, border=2, fill='black')
-
-def add_offset(coord, offset):
-    (x, y) = coord
-    return (x - offset, y - offset)
-
-def get_qr_image(data):
-    qr_obj = qrcode.QRCode(version=4, border=4, box_size=15)
-    qr_obj.add_data(data)
-    qr_obj.make(fit=True)
-    return qr_obj.make_image(fill_color='black', back_color='white')
+def draw_grid(draw, image):
+    draw_line(draw, [(0, PAGE_HEIGHT / 2), (PAGE_WIDTH, PAGE_HEIGHT / 2)])
+    draw_line(draw, [(PAGE_WIDTH / 4, 0), (PAGE_WIDTH / 4, PAGE_HEIGHT)])
+    draw_line(draw, [(PAGE_WIDTH / 4 * 2, 0), (PAGE_WIDTH / 4 * 2, PAGE_HEIGHT)])
+    draw_line(draw, [(PAGE_WIDTH / 4 * 3, 0), (PAGE_WIDTH / 4 * 3, PAGE_HEIGHT)])
+    image = ImageOps.expand(image, border=2, fill='black')
 
 def get_char_page_at(i):
-    image_obj = Image.new('RGB', (WIDTH, HEIGHT), color='white')
-    draw_obj = ImageDraw.Draw(image_obj)
-    draw_grid(draw_obj, image_obj)
-    for j in range(SPLIT):
-        draw_char(draw_obj, COORDS[j], chars[i * SPLIT + j])
-    return image_obj
+    image = Image.new('RGB', (PAGE_WIDTH, PAGE_HEIGHT), color='white')
+    draw = ImageDraw.Draw(image)
+    draw_grid(draw, image)
+    for j in range(GRID_SPLIT):
+        draw_char(draw, GRID_COORDS[j], chars[i * GRID_SPLIT + j])
+    return image
+
+def get_qr_image(data):
+    qr = qrcode.QRCode(version=4, border=4, box_size=15)
+    qr.add_data(data)
+    qr.make(fit=True)
+    return qr.make_image(fill_color='black', back_color='white')
 
 def get_qr_page_at(i):
-    offset = get_qr_image('').size[0] // 2
-    image_obj = Image.new('RGB', (WIDTH, HEIGHT), color='white')
-    draw_obj = ImageDraw.Draw(image_obj)
-    draw_grid(draw_obj, image_obj)
-    for j in range(SPLIT):
-        image_obj.paste(get_qr_image(links[i * SPLIT + j]), add_offset(COORDS[j], offset))
-    return image_obj
+    offset = get_qr_image('').size[0] / 2
+    image = Image.new('RGB', (PAGE_WIDTH, PAGE_HEIGHT), color='white')
+    draw = ImageDraw.Draw(image)
+    draw_grid(draw, image)
+    for j in range(GRID_SPLIT):
+        (x, y) = GRID_COORDS[j]
+        image.paste(get_qr_image(links[GRID_SPLIT * i + j]), (x - offset, y - offset))
+    return image
 
-for i in range(len(items) // SPLIT):
+for i in range(len(items) // GRID_SPLIT):
     char_page = get_char_page_at(i)
     qr_page = get_qr_page_at(i)
     qr_page = qr_page.transpose(Image.FLIP_TOP_BOTTOM)
