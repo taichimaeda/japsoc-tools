@@ -1,0 +1,7 @@
+#!/bin/bash
+mkdir -p ./img/
+mkdir -p ./pdf/
+rm -f ./img/**
+rm -f ./pdf/**
+python ./main.py
+convert ./img/*.jpg ./pdf/output.pdf
